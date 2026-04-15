@@ -4,9 +4,13 @@ import psycopg2
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+import time
 
 try:
     print("🚀 Démarrage du script...")
+
+    # 🔥 petit délai pour stabilité GitHub
+    time.sleep(2)
 
     # ================= GOOGLE =================
     creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS"])
@@ -25,13 +29,13 @@ try:
 
     # ================= SUPABASE =================
     conn = psycopg2.connect(
-        host=os.environ["DB_HOST"],
-        database=os.environ["DB_NAME"],
-        user=os.environ["DB_USER"],
-        password=os.environ["DB_PASSWORD"],
-        port=5432,
-        sslmode="require"
-    )
+    host=os.environ["DB_HOST"],
+    database=os.environ["DB_NAME"],
+    user=os.environ["DB_USER"],
+    password=os.environ["DB_PASSWORD"],
+    port=int(os.environ.get("DB_PORT", 6543)),
+    sslmode="require"
+)
 
     cursor = conn.cursor()
     print("✅ Connexion Supabase OK")
@@ -54,7 +58,7 @@ try:
 
         for fmt in formats:
             try:
-                return datetime.strptime(value, fmt)
+                return datetime.strptime(value, fmt).strftime("%Y-%m-%d %H:%M:%S")
             except:
                 continue
 
@@ -62,11 +66,12 @@ try:
 
     # ================= TABLES =================
     tables = {
-        "Salles réunion Réel": "salles_reunion_reel",
-        "Hebergement": "hebergement",
-        "Suivi ticket": "suivi_ticket",
-        "Suivi ticket Crédit": "suivi_ticket_credit"
-    }
+    "Salles réunion Réel": "salles_reunion_reel",
+    "Hebergement": "hebergement",
+    "Suivi ticket": "suivi_ticket",
+    "Suivi ticket Crédit": "suivi_ticket_credit",
+    "Energie": "energie"
+}
 
     # ================= TRAITEMENT =================
     for sheet_name, table_name in tables.items():
@@ -77,6 +82,7 @@ try:
             data = sheet.get_all_values()
 
             if not data:
+                print("⚠️ Aucun data")
                 continue
 
             headers = data[0]
@@ -84,7 +90,7 @@ try:
 
             print(f"📊 {len(rows)} lignes")
 
-            # Colonnes PostgreSQL
+            # 🔥 récupérer colonnes PostgreSQL
             cursor.execute(f"""
                 SELECT column_name
                 FROM information_schema.columns
@@ -92,12 +98,15 @@ try:
             """)
             pg_columns = [col[0] for col in cursor.fetchall()]
 
+            # 🔥 nettoyage colonnes
             columns = []
             for h in headers:
                 col = h.lower().strip()
                 col = col.replace(" ", "_").replace("é", "e").replace("è", "e")
                 col = col.replace("à", "a").replace("/", "_")
                 columns.append(col)
+
+            inserted = 0
 
             for row in rows:
                 values = []
@@ -109,6 +118,7 @@ try:
 
                     val = row[i] if i < len(row) else None
 
+                    # 🔥 gestion date auto
                     if any(k in col for k in ["date", "time"]):
                         val = format_date(val)
 
@@ -124,12 +134,14 @@ try:
                 query = f"""
                     INSERT INTO {table_name} ({columns_sql})
                     VALUES ({placeholders})
+                    ON CONFLICT DO NOTHING
                 """
 
                 cursor.execute(query, values)
+                inserted += 1
 
             conn.commit()
-            print(f"✅ {table_name} terminé")
+            print(f"✅ {table_name} terminé ({inserted} insertions)")
 
         except Exception as e:
             print(f"❌ Erreur {sheet_name} :", e)
@@ -137,7 +149,7 @@ try:
     cursor.close()
     conn.close()
 
-    print("\n🎉 Synchronisation terminée !")
+    print("\n🎉 Synchronisation terminée avec succès !")
 
 except Exception as e:
     print("❌ ERREUR GLOBALE :", e)
