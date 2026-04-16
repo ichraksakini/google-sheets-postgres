@@ -6,7 +6,7 @@ import re
 from oauth2client.service_account import ServiceAccountCredentials
 import time
 
-print("🔥 FINAL VERSION FIXED 💯")
+print("🔥 FINAL VERSION ULTRA FIXED 💯")
 
 try:
     print("🚀 Démarrage du script...")
@@ -115,6 +115,7 @@ try:
                         ''')
                         print(f"➕ colonne ajoutée: {col}")
                     except:
+                        conn.rollback()
                         print(f"⚠️ colonne ignorée: {col}")
 
             conn.commit()
@@ -132,7 +133,22 @@ try:
                         valid_columns.append(col)
                         values.append(val)
 
-                    record_id = values[0] if values[0] else str(hash(str(values)))
+                    # 🔥 SUPPRESSION DOUBLONS INSERT (CRUCIAL)
+                    unique_cols = []
+                    unique_vals = []
+                    seen_insert = set()
+
+                    for col, val in zip(valid_columns, values):
+                        if col not in seen_insert:
+                            seen_insert.add(col)
+                            unique_cols.append(col)
+                            unique_vals.append(val)
+
+                    valid_columns = unique_cols
+                    values = unique_vals
+
+                    # 🔥 ID UNIQUE
+                    record_id = values[0] if values and values[0] else str(hash(str(values)))
 
                     valid_columns.insert(0, "id")
                     values.insert(0, record_id)
@@ -149,7 +165,7 @@ try:
                     cursor.execute(query, values)
                     inserted += 1
 
-                except Exception:
+                except Exception as e:
                     conn.rollback()
                     print("⚠️ ligne ignorée")
 
