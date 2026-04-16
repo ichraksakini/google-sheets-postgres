@@ -6,7 +6,7 @@ import re
 from oauth2client.service_account import ServiceAccountCredentials
 import time
 
-print("🔥 FINAL VERSION NO BUG 💯")
+print("🔥 FINAL VERSION ULTRA CLEAN 🔥")
 
 try:
     print("🚀 Démarrage du script...")
@@ -24,7 +24,6 @@ try:
     client = gspread.authorize(creds)
 
     spreadsheet = client.open_by_key("1fQ1fAFxTIBTU_SjYhsPx1_ctBvGCarxqMeGda4xRYP8")
-
     print("✅ Connexion Google Sheets OK")
 
     # ================= NEON =================
@@ -36,7 +35,7 @@ try:
         port=5432,
         sslmode="require"
     )
-
+    conn.autocommit = False
     cursor = conn.cursor()
     print("✅ Connexion NEON OK")
 
@@ -47,6 +46,16 @@ try:
         "Suivi ticket Crédit": "suivi_ticket_credit",
         "Energie": "energie"
     }
+
+    # ================= FUNCTION CLEAN =================
+    def clean_column(col):
+        col = col.lower().strip()
+        col = col.replace("\n", "_").replace("\r", "_")
+        col = col.replace(" ", "_")
+        col = col.replace("é", "e").replace("è", "e").replace("ê", "e")
+        col = col.replace("à", "a").replace("ù", "u")
+        col = re.sub(r'[^a-z0-9_]', '', col)
+        return col[:50] if col else "col"
 
     for sheet_name, table_name in tables.items():
         try:
@@ -64,30 +73,21 @@ try:
 
             print(f"📊 {len(rows)} lignes")
 
-            # ================= CLEAN + REMOVE DUPLICATES =================
-            seen = set()
+            # ================= CLEAN + UNIQUE =================
+            seen = {}
             columns = []
             indexes = []
 
             for i, h in enumerate(headers):
-                col = h.lower().strip()
-                col = col.replace("\n", "_").replace("\r", "_")
-                col = col.replace(" ", "_")
-                col = col.replace("é", "e").replace("è", "e").replace("ê", "e")
-                col = col.replace("à", "a").replace("ù", "u")
+                col = clean_column(h)
 
-                col = re.sub(r'[^a-z0-9_]', '', col)
-
-                if not col:
-                    col = "col"
-
-                col = col[:50]
-
+                # 🔥 FIX DOUBLONS → rename automatique
                 if col in seen:
-                    print(f"⚠️ colonne dupliquée supprimée: {col}")
-                    continue
+                    seen[col] += 1
+                    col = f"{col}_{seen[col]}"
+                else:
+                    seen[col] = 0
 
-                seen.add(col)
                 columns.append(col)
                 indexes.append(i)
 
@@ -103,20 +103,20 @@ try:
                 SELECT column_name FROM information_schema.columns
                 WHERE table_name = '{table_name}'
             """)
-            existing_columns = [col[0] for col in cursor.fetchall()]
+            existing_columns = [c[0] for c in cursor.fetchall()]
 
             # ================= ADD COLUMNS =================
             for col in columns:
                 if col not in existing_columns:
                     try:
-                        cursor.execute(f'''
-                            ALTER TABLE {table_name}
-                            ADD COLUMN "{col}" TEXT;
-                        ''')
+                        cursor.execute(f'ALTER TABLE {table_name} ADD COLUMN "{col}" TEXT;')
                         print(f"➕ colonne ajoutée: {col}")
-                    except:
+                    except Exception as e:
                         conn.rollback()
-                        print(f"⚠️ colonne ignorée: {col}")
+                        if "already exists" in str(e):
+                            print("⚠️ colonne déjà existante")
+                        else:
+                            print("❌ erreur colonne:", e)
 
             conn.commit()
 
@@ -133,13 +133,25 @@ try:
                         valid_columns.append(col)
                         values.append(val)
 
+                    # 🔥 ID UNIQUE
                     record_id = values[0] if values and values[0] else str(hash(str(values)))
 
                     valid_columns.insert(0, "id")
                     values.insert(0, record_id)
 
-                    placeholders = ", ".join(["%s"] * len(valid_columns))
-                    columns_sql = ", ".join([f'"{c}"' for c in valid_columns])
+                    # 🔥 sécurité ultime (no duplicates)
+                    unique_cols = []
+                    unique_vals = []
+                    seen_cols = set()
+
+                    for c, v in zip(valid_columns, values):
+                        if c not in seen_cols:
+                            seen_cols.add(c)
+                            unique_cols.append(c)
+                            unique_vals.append(v)
+
+                    placeholders = ", ".join(["%s"] * len(unique_cols))
+                    columns_sql = ", ".join([f'"{c}"' for c in unique_cols])
 
                     query = f"""
                         INSERT INTO {table_name} ({columns_sql})
@@ -147,7 +159,7 @@ try:
                         ON CONFLICT (id) DO NOTHING
                     """
 
-                    cursor.execute(query, values)
+                    cursor.execute(query, unique_vals)
                     inserted += 1
 
                 except Exception as e:
