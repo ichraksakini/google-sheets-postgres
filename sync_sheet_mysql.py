@@ -5,10 +5,11 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import time
 
-print("🔥 VERSION FINALE NEON 100% 🔥")
+print("🔥🔥🔥 SCRIPT VERSION FINAL V2 NEON 🔥🔥🔥")
 
 try:
     print("🚀 Démarrage du script...")
+    print("🔥 JE SUIS LE BON SCRIPT 🔥")
     time.sleep(2)
 
     # ================= GOOGLE =================
@@ -49,7 +50,6 @@ try:
         "Energie": "energie"
     }
 
-    # ================= TRAITEMENT =================
     for sheet_name, table_name in tables.items():
         try:
             print(f"\n🔄 {sheet_name} → {table_name}")
@@ -66,7 +66,7 @@ try:
 
             print(f"📊 {len(rows)} lignes")
 
-            # 🔥 nettoyer colonnes
+            # 🔥 CLEAN COLUMNS
             columns = []
             for h in headers:
                 col = h.lower().strip()
@@ -82,14 +82,13 @@ try:
                 );
             """)
 
-            # ================= GET EXISTING COLUMNS =================
+            # ================= ADD COLUMNS =================
             cursor.execute(f"""
                 SELECT column_name FROM information_schema.columns
                 WHERE table_name = '{table_name}'
             """)
             existing_columns = [col[0] for col in cursor.fetchall()]
 
-            # ================= ADD COLUMNS =================
             for col in columns:
                 if col not in existing_columns:
                     cursor.execute(f'''
@@ -102,7 +101,7 @@ try:
 
             inserted = 0
 
-            # ================= INSERT DATA =================
+            # ================= INSERT =================
             for row in rows:
                 try:
                     values = []
@@ -111,7 +110,6 @@ try:
                     for i, col in enumerate(columns):
                         val = row[i] if i < len(row) else None
 
-                        # 🔥 IMPORTANT : on garde TOUT
                         valid_columns.append(col)
                         values.append(val)
 
@@ -127,8 +125,8 @@ try:
                     inserted += 1
 
                 except Exception as e:
-                    conn.rollback()
                     print("⚠️ ligne ignorée:", e)
+                    conn.rollback()
 
             conn.commit()
             print(f"✅ {table_name} terminé ({inserted} insertions)")
