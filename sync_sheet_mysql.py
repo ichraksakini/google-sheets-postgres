@@ -5,7 +5,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import time
 
-print("🔥 VERSION FINALE 100% WORKING 🔥")
+print("🔥 VERSION FINALE NEON 100% 🔥")
 
 try:
     print("🚀 Démarrage du script...")
@@ -27,11 +27,20 @@ try:
     print("✅ Connexion Google Sheets OK")
 
     # ================= NEON =================
-    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    conn = psycopg2.connect(
+        host=os.environ["DB_HOST"],
+        database=os.environ["DB_NAME"],
+        user=os.environ["DB_USER"],
+        password=os.environ["DB_PASSWORD"],
+        port=5432,
+        sslmode="require"
+    )
+
     cursor = conn.cursor()
 
     print("✅ Connexion NEON OK")
 
+    # ================= TABLES =================
     tables = {
         "Salles réunion Réel": "salles_reunion_reel",
         "Hebergement": "hebergement",
@@ -40,6 +49,7 @@ try:
         "Energie": "energie"
     }
 
+    # ================= TRAITEMENT =================
     for sheet_name, table_name in tables.items():
         try:
             print(f"\n🔄 {sheet_name} → {table_name}")
@@ -56,7 +66,7 @@ try:
 
             print(f"📊 {len(rows)} lignes")
 
-            # ================= CLEAN COLUMNS =================
+            # 🔥 nettoyer colonnes
             columns = []
             for h in headers:
                 col = h.lower().strip()
@@ -72,26 +82,27 @@ try:
                 );
             """)
 
-            # ================= ADD COLUMNS =================
+            # ================= GET EXISTING COLUMNS =================
             cursor.execute(f"""
                 SELECT column_name FROM information_schema.columns
                 WHERE table_name = '{table_name}'
             """)
             existing_columns = [col[0] for col in cursor.fetchall()]
 
+            # ================= ADD COLUMNS =================
             for col in columns:
                 if col not in existing_columns:
-                    cursor.execute(f"""
+                    cursor.execute(f'''
                         ALTER TABLE {table_name}
                         ADD COLUMN "{col}" TEXT;
-                    """)
+                    ''')
                     print(f"➕ colonne ajoutée: {col}")
 
             conn.commit()
 
             inserted = 0
 
-            # ================= INSERT (FIXED) =================
+            # ================= INSERT DATA =================
             for row in rows:
                 try:
                     values = []
@@ -100,7 +111,7 @@ try:
                     for i, col in enumerate(columns):
                         val = row[i] if i < len(row) else None
 
-                        # 🔥 IMPORTANT : on prend TOUT même vide
+                        # 🔥 IMPORTANT : on garde TOUT
                         valid_columns.append(col)
                         values.append(val)
 
