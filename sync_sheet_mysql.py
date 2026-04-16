@@ -2,10 +2,11 @@ import os
 import json
 import psycopg2
 import gspread
+import re
 from oauth2client.service_account import ServiceAccountCredentials
 import time
 
-print("🔥 FINAL CLEAN VERSION 🚀")
+print("🔥 FINAL VERSION FIXED 💯")
 
 try:
     print("🚀 Démarrage du script...")
@@ -39,7 +40,6 @@ try:
     cursor = conn.cursor()
     print("✅ Connexion NEON OK")
 
-    # ================= TABLES =================
     tables = {
         "Salles réunion Réel": "salles_reunion_reel",
         "Hebergement": "hebergement",
@@ -64,17 +64,24 @@ try:
 
             print(f"📊 {len(rows)} lignes")
 
-            # ================= CLEAN + UNIQUE COLUMNS =================
+            # ================= CLEAN COLUMNS =================
             seen = {}
             columns = []
 
             for h in headers:
                 col = h.lower().strip()
-                col = col.replace(" ", "_").replace("é", "e").replace("è", "e")
-                col = col.replace("à", "a").replace("/", "_")
-                col = col.replace("'", "").replace("-", "_")
 
-                col = col[:60]  # 🔥 éviter noms trop longs
+                col = col.replace("\n", "_").replace("\r", "_")
+                col = col.replace(" ", "_")
+                col = col.replace("é", "e").replace("è", "e").replace("ê", "e")
+                col = col.replace("à", "a").replace("ù", "u")
+
+                col = re.sub(r'[^a-z0-9_]', '', col)
+
+                if not col:
+                    col = "col"
+
+                col = col[:50]
 
                 if col in seen:
                     seen[col] += 1
@@ -91,7 +98,7 @@ try:
                 );
             """)
 
-            # ================= GET EXISTING COLUMNS =================
+            # ================= GET EXISTING =================
             cursor.execute(f"""
                 SELECT column_name FROM information_schema.columns
                 WHERE table_name = '{table_name}'
@@ -100,15 +107,15 @@ try:
 
             # ================= ADD COLUMNS =================
             for col in columns:
-                try:
-                    if col not in existing_columns:
+                if col not in existing_columns:
+                    try:
                         cursor.execute(f'''
                             ALTER TABLE {table_name}
                             ADD COLUMN "{col}" TEXT;
                         ''')
                         print(f"➕ colonne ajoutée: {col}")
-                except:
-                    print(f"⚠️ colonne ignorée: {col}")
+                    except:
+                        print(f"⚠️ colonne ignorée: {col}")
 
             conn.commit()
 
@@ -125,7 +132,6 @@ try:
                         valid_columns.append(col)
                         values.append(val)
 
-                    # 🔥 ID unique
                     record_id = values[0] if values[0] else str(hash(str(values)))
 
                     valid_columns.insert(0, "id")
@@ -143,7 +149,7 @@ try:
                     cursor.execute(query, values)
                     inserted += 1
 
-                except Exception as e:
+                except Exception:
                     conn.rollback()
                     print("⚠️ ligne ignorée")
 
