@@ -6,7 +6,7 @@ import re
 from oauth2client.service_account import ServiceAccountCredentials
 import time
 
-print("🔥 FINAL VERSION ULTRA FIXED 💯")
+print("🔥 FINAL VERSION NO BUG 💯")
 
 try:
     print("🚀 Démarrage du script...")
@@ -64,13 +64,13 @@ try:
 
             print(f"📊 {len(rows)} lignes")
 
-            # ================= CLEAN COLUMNS =================
-            seen = {}
+            # ================= CLEAN + REMOVE DUPLICATES =================
+            seen = set()
             columns = []
+            indexes = []
 
-            for h in headers:
+            for i, h in enumerate(headers):
                 col = h.lower().strip()
-
                 col = col.replace("\n", "_").replace("\r", "_")
                 col = col.replace(" ", "_")
                 col = col.replace("é", "e").replace("è", "e").replace("ê", "e")
@@ -84,12 +84,12 @@ try:
                 col = col[:50]
 
                 if col in seen:
-                    seen[col] += 1
-                    col = f"{col}_{seen[col]}"
-                else:
-                    seen[col] = 1
+                    print(f"⚠️ colonne dupliquée supprimée: {col}")
+                    continue
 
+                seen.add(col)
                 columns.append(col)
+                indexes.append(i)
 
             # ================= CREATE TABLE =================
             cursor.execute(f"""
@@ -128,26 +128,11 @@ try:
                     values = []
                     valid_columns = []
 
-                    for i, col in enumerate(columns):
-                        val = row[i] if i < len(row) else None
+                    for idx, col in zip(indexes, columns):
+                        val = row[idx] if idx < len(row) else None
                         valid_columns.append(col)
                         values.append(val)
 
-                    # 🔥 SUPPRESSION DOUBLONS INSERT (CRUCIAL)
-                    unique_cols = []
-                    unique_vals = []
-                    seen_insert = set()
-
-                    for col, val in zip(valid_columns, values):
-                        if col not in seen_insert:
-                            seen_insert.add(col)
-                            unique_cols.append(col)
-                            unique_vals.append(val)
-
-                    valid_columns = unique_cols
-                    values = unique_vals
-
-                    # 🔥 ID UNIQUE
                     record_id = values[0] if values and values[0] else str(hash(str(values)))
 
                     valid_columns.insert(0, "id")
