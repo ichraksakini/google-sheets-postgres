@@ -6,7 +6,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import time
 
-print("🔥 VERSION FINALE NEON 🔥")
+print("🔥 VERSION FINALE STABLE NEON 🔥")
 
 try:
     print("🚀 Démarrage du script...")
@@ -28,11 +28,9 @@ try:
     print("✅ Connexion Google Sheets OK")
 
     # ================= NEON =================
-    conn = psycopg2.connect(
-        os.environ["DATABASE_URL"]
-    )
-
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
     cursor = conn.cursor()
+
     print("✅ Connexion NEON OK")
 
     # ================= FORMAT DATE =================
@@ -55,7 +53,7 @@ try:
             except:
                 continue
 
-        return None
+        return value  # fallback texte
 
     # ================= TABLES =================
     tables = {
@@ -83,7 +81,7 @@ try:
 
             print(f"📊 {len(rows)} lignes")
 
-            # 🔥 transformer noms colonnes
+            # 🔥 nettoyer noms colonnes
             columns = []
             for h in headers:
                 col = h.lower().strip()
@@ -99,24 +97,36 @@ try:
                 );
             """)
 
-            # ================= ADD MISSING COLUMNS =================
+            # ================= GET EXISTING COLUMNS =================
             cursor.execute(f"""
-                SELECT column_name
+                SELECT column_name, data_type
                 FROM information_schema.columns
                 WHERE table_name = '{table_name}'
             """)
-            existing_columns = [col[0] for col in cursor.fetchall()]
 
+            existing_columns = {}
+            for col_name, col_type in cursor.fetchall():
+                existing_columns[col_name] = col_type
+
+            # ================= ADD / FIX COLUMNS =================
             for col in columns:
-                if col not in existing_columns:
-                    try:
+                try:
+                    if col not in existing_columns:
                         cursor.execute(f"""
                             ALTER TABLE {table_name}
                             ADD COLUMN {col} TEXT;
                         """)
                         print(f"➕ colonne ajoutée: {col}")
-                    except Exception as e:
-                        print(f"⚠️ erreur ajout colonne {col}: {e}")
+
+                    elif existing_columns[col] != "text":
+                        cursor.execute(f"""
+                            ALTER TABLE {table_name}
+                            ALTER COLUMN {col} TYPE TEXT;
+                        """)
+                        print(f"🔄 colonne convertie en TEXT: {col}")
+
+                except Exception as e:
+                    print(f"⚠️ erreur colonne {col}: {e}")
 
             conn.commit()
 
@@ -124,40 +134,45 @@ try:
 
             # ================= INSERT DATA =================
             for row in rows:
-                values = []
-                valid_columns = []
+                try:
+                    values = []
+                    valid_columns = []
 
-                for i, col in enumerate(columns):
-                    val = row[i] if i < len(row) else None
+                    for i, col in enumerate(columns):
+                        val = row[i] if i < len(row) else None
 
-                    # format date auto
-                    if "date" in col:
-                        val = format_date(val)
+                        if "date" in col:
+                            val = format_date(val)
 
-                    valid_columns.append(col)
-                    values.append(val)
+                        valid_columns.append(col)
+                        values.append(val)
 
-                placeholders = ", ".join(["%s"] * len(valid_columns))
-                columns_sql = ", ".join(valid_columns)
+                    placeholders = ", ".join(["%s"] * len(valid_columns))
+                    columns_sql = ", ".join(valid_columns)
 
-                query = f"""
-                    INSERT INTO {table_name} ({columns_sql})
-                    VALUES ({placeholders})
-                """
+                    query = f"""
+                        INSERT INTO {table_name} ({columns_sql})
+                        VALUES ({placeholders})
+                    """
 
-                cursor.execute(query, values)
-                inserted += 1
+                    cursor.execute(query, values)
+                    inserted += 1
+
+                except Exception as e:
+                    print(f"⚠️ ligne ignorée: {e}")
+                    conn.rollback()
 
             conn.commit()
             print(f"✅ {table_name} terminé ({inserted} lignes insérées)")
 
         except Exception as e:
+            conn.rollback()
             print(f"❌ Erreur {sheet_name} :", e)
 
     cursor.close()
     conn.close()
 
-    print("\n🎉 TOUT EST IMPORTÉ AVEC SUCCÈS !!!")
+    print("\n🎉 IMPORT COMPLET RÉUSSI !!!")
 
 except Exception as e:
     print("❌ ERREUR GLOBALE :", e)
