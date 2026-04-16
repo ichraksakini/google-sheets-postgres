@@ -6,10 +6,10 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import time
 
+print("🔥 VERSION FINALE NEON 🔥")
+
 try:
     print("🚀 Démarrage du script...")
-
-    # 🔥 petit délai pour stabilité GitHub
     time.sleep(2)
 
     # ================= GOOGLE =================
@@ -27,27 +27,20 @@ try:
 
     print("✅ Connexion Google Sheets OK")
 
-    # ================= SUPABASE =================
+    # ================= NEON =================
     conn = psycopg2.connect(
-    host=os.environ["DB_HOST"],
-    database=os.environ["DB_NAME"],
-    user=os.environ["DB_USER"],
-    password=os.environ["DB_PASSWORD"],
-    port=5432,  # ✅ IMPORTANT
-    sslmode="require"
-)
+        os.environ["DATABASE_URL"]
+    )
 
     cursor = conn.cursor()
-    print("✅ Connexion Supabase OK")
+    print("✅ Connexion NEON OK")
 
-    # ================= DATE FIX =================
+    # ================= FORMAT DATE =================
     def format_date(value):
-        if value is None:
+        if not value:
             return None
 
         value = str(value).strip()
-        if value == "":
-            return None
 
         formats = [
             "%m/%d/%Y %H:%M:%S",
@@ -58,7 +51,7 @@ try:
 
         for fmt in formats:
             try:
-                return datetime.strptime(value, fmt).strftime("%Y-%m-%d %H:%M:%S")
+                return datetime.strptime(value, fmt)
             except:
                 continue
 
@@ -66,12 +59,12 @@ try:
 
     # ================= TABLES =================
     tables = {
-    "Salles réunion Réel": "salles_reunion_reel",
-    "Hebergement": "hebergement",
-    "Suivi ticket": "suivi_ticket",
-    "Suivi ticket Crédit": "suivi_ticket_credit",
-    "Energie": "energie"
-}
+        "Salles réunion Réel": "salles_reunion_reel",
+        "Hebergement": "hebergement",
+        "Suivi ticket": "suivi_ticket",
+        "Suivi ticket Crédit": "suivi_ticket_credit",
+        "Energie": "energie"
+    }
 
     # ================= TRAITEMENT =================
     for sheet_name, table_name in tables.items():
@@ -90,43 +83,59 @@ try:
 
             print(f"📊 {len(rows)} lignes")
 
-            # 🔥 récupérer colonnes PostgreSQL
-            cursor.execute(f"""
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_name = '{table_name}'
-            """)
-            pg_columns = [col[0] for col in cursor.fetchall()]
-
-            # 🔥 nettoyage colonnes
+            # 🔥 transformer noms colonnes
             columns = []
             for h in headers:
                 col = h.lower().strip()
                 col = col.replace(" ", "_").replace("é", "e").replace("è", "e")
                 col = col.replace("à", "a").replace("/", "_")
+                col = col.replace("'", "")
                 columns.append(col)
+
+            # ================= CREATE TABLE =================
+            cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_name} (
+                    id SERIAL PRIMARY KEY
+                );
+            """)
+
+            # ================= ADD MISSING COLUMNS =================
+            cursor.execute(f"""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = '{table_name}'
+            """)
+            existing_columns = [col[0] for col in cursor.fetchall()]
+
+            for col in columns:
+                if col not in existing_columns:
+                    try:
+                        cursor.execute(f"""
+                            ALTER TABLE {table_name}
+                            ADD COLUMN {col} TEXT;
+                        """)
+                        print(f"➕ colonne ajoutée: {col}")
+                    except Exception as e:
+                        print(f"⚠️ erreur ajout colonne {col}: {e}")
+
+            conn.commit()
 
             inserted = 0
 
+            # ================= INSERT DATA =================
             for row in rows:
                 values = []
                 valid_columns = []
 
                 for i, col in enumerate(columns):
-                    if col not in pg_columns:
-                        continue
-
                     val = row[i] if i < len(row) else None
 
-                    # 🔥 gestion date auto
-                    if any(k in col for k in ["date", "time"]):
+                    # format date auto
+                    if "date" in col:
                         val = format_date(val)
 
                     valid_columns.append(col)
                     values.append(val)
-
-                if not values:
-                    continue
 
                 placeholders = ", ".join(["%s"] * len(valid_columns))
                 columns_sql = ", ".join(valid_columns)
@@ -134,14 +143,13 @@ try:
                 query = f"""
                     INSERT INTO {table_name} ({columns_sql})
                     VALUES ({placeholders})
-                    ON CONFLICT DO NOTHING
                 """
 
                 cursor.execute(query, values)
                 inserted += 1
 
             conn.commit()
-            print(f"✅ {table_name} terminé ({inserted} insertions)")
+            print(f"✅ {table_name} terminé ({inserted} lignes insérées)")
 
         except Exception as e:
             print(f"❌ Erreur {sheet_name} :", e)
@@ -149,7 +157,7 @@ try:
     cursor.close()
     conn.close()
 
-    print("\n🎉 Synchronisation terminée avec succès !")
+    print("\n🎉 TOUT EST IMPORTÉ AVEC SUCCÈS !!!")
 
 except Exception as e:
     print("❌ ERREUR GLOBALE :", e)
