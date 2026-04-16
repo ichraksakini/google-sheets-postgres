@@ -5,11 +5,10 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import time
 
-print("🔥🔥🔥 SCRIPT VERSION FINAL V2 NEON 🔥🔥🔥")
+print("🔥 FINAL CLEAN VERSION 🚀")
 
 try:
     print("🚀 Démarrage du script...")
-    print("🔥 JE SUIS LE BON SCRIPT 🔥")
     time.sleep(2)
 
     # ================= GOOGLE =================
@@ -38,7 +37,6 @@ try:
     )
 
     cursor = conn.cursor()
-
     print("✅ Connexion NEON OK")
 
     # ================= TABLES =================
@@ -66,29 +64,39 @@ try:
 
             print(f"📊 {len(rows)} lignes")
 
-            # 🔥 CLEAN COLUMNS
+            # ================= CLEAN + UNIQUE COLUMNS =================
+            seen = {}
             columns = []
+
             for h in headers:
                 col = h.lower().strip()
                 col = col.replace(" ", "_").replace("é", "e").replace("è", "e")
                 col = col.replace("à", "a").replace("/", "_")
                 col = col.replace("'", "").replace("-", "_")
+
+                if col in seen:
+                    seen[col] += 1
+                    col = f"{col}_{seen[col]}"
+                else:
+                    seen[col] = 1
+
                 columns.append(col)
 
             # ================= CREATE TABLE =================
             cursor.execute(f"""
                 CREATE TABLE IF NOT EXISTS {table_name} (
-                    id SERIAL PRIMARY KEY
+                    id TEXT PRIMARY KEY
                 );
             """)
 
-            # ================= ADD COLUMNS =================
+            # ================= GET EXISTING COLUMNS =================
             cursor.execute(f"""
                 SELECT column_name FROM information_schema.columns
                 WHERE table_name = '{table_name}'
             """)
             existing_columns = [col[0] for col in cursor.fetchall()]
 
+            # ================= ADD MISSING COLUMNS =================
             for col in columns:
                 if col not in existing_columns:
                     cursor.execute(f'''
@@ -113,20 +121,27 @@ try:
                         valid_columns.append(col)
                         values.append(val)
 
+                    # 🔥 utiliser première colonne comme ID unique
+                    record_id = values[0] if values[0] else str(hash(str(values)))
+
+                    valid_columns.insert(0, "id")
+                    values.insert(0, record_id)
+
                     placeholders = ", ".join(["%s"] * len(valid_columns))
                     columns_sql = ", ".join([f'"{c}"' for c in valid_columns])
 
                     query = f"""
                         INSERT INTO {table_name} ({columns_sql})
                         VALUES ({placeholders})
+                        ON CONFLICT (id) DO NOTHING
                     """
 
                     cursor.execute(query, values)
                     inserted += 1
 
                 except Exception as e:
-                    print("⚠️ ligne ignorée:", e)
                     conn.rollback()
+                    print("⚠️ ligne ignorée:", e)
 
             conn.commit()
             print(f"✅ {table_name} terminé ({inserted} insertions)")
