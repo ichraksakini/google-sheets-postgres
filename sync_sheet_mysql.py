@@ -3,10 +3,9 @@ import json
 import psycopg2
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
 import time
 
-print("🔥 VERSION FINALE STABLE NEON 🔥")
+print("🔥 VERSION FINALE 100% WORKING 🔥")
 
 try:
     print("🚀 Démarrage du script...")
@@ -33,29 +32,6 @@ try:
 
     print("✅ Connexion NEON OK")
 
-    # ================= FORMAT DATE =================
-    def format_date(value):
-        if not value:
-            return None
-
-        value = str(value).strip()
-
-        formats = [
-            "%m/%d/%Y %H:%M:%S",
-            "%m/%d/%Y",
-            "%d/%m/%Y",
-            "%Y-%m-%d"
-        ]
-
-        for fmt in formats:
-            try:
-                return datetime.strptime(value, fmt)
-            except:
-                continue
-
-        return value  # fallback texte
-
-    # ================= TABLES =================
     tables = {
         "Salles réunion Réel": "salles_reunion_reel",
         "Hebergement": "hebergement",
@@ -64,7 +40,6 @@ try:
         "Energie": "energie"
     }
 
-    # ================= TRAITEMENT =================
     for sheet_name, table_name in tables.items():
         try:
             print(f"\n🔄 {sheet_name} → {table_name}")
@@ -72,8 +47,8 @@ try:
             sheet = spreadsheet.worksheet(sheet_name)
             data = sheet.get_all_values()
 
-            if not data:
-                print("⚠️ Aucun data")
+            if not data or len(data) < 2:
+                print("⚠️ Pas de données")
                 continue
 
             headers = data[0]
@@ -81,13 +56,13 @@ try:
 
             print(f"📊 {len(rows)} lignes")
 
-            # 🔥 nettoyer noms colonnes
+            # ================= CLEAN COLUMNS =================
             columns = []
             for h in headers:
                 col = h.lower().strip()
                 col = col.replace(" ", "_").replace("é", "e").replace("è", "e")
                 col = col.replace("à", "a").replace("/", "_")
-                col = col.replace("'", "")
+                col = col.replace("'", "").replace("-", "_")
                 columns.append(col)
 
             # ================= CREATE TABLE =================
@@ -97,42 +72,26 @@ try:
                 );
             """)
 
-            # ================= GET EXISTING COLUMNS =================
+            # ================= ADD COLUMNS =================
             cursor.execute(f"""
-                SELECT column_name, data_type
-                FROM information_schema.columns
+                SELECT column_name FROM information_schema.columns
                 WHERE table_name = '{table_name}'
             """)
+            existing_columns = [col[0] for col in cursor.fetchall()]
 
-            existing_columns = {}
-            for col_name, col_type in cursor.fetchall():
-                existing_columns[col_name] = col_type
-
-            # ================= ADD / FIX COLUMNS =================
             for col in columns:
-                try:
-                    if col not in existing_columns:
-                        cursor.execute(f"""
-                            ALTER TABLE {table_name}
-                            ADD COLUMN {col} TEXT;
-                        """)
-                        print(f"➕ colonne ajoutée: {col}")
-
-                    elif existing_columns[col] != "text":
-                        cursor.execute(f"""
-                            ALTER TABLE {table_name}
-                            ALTER COLUMN {col} TYPE TEXT;
-                        """)
-                        print(f"🔄 colonne convertie en TEXT: {col}")
-
-                except Exception as e:
-                    print(f"⚠️ erreur colonne {col}: {e}")
+                if col not in existing_columns:
+                    cursor.execute(f"""
+                        ALTER TABLE {table_name}
+                        ADD COLUMN "{col}" TEXT;
+                    """)
+                    print(f"➕ colonne ajoutée: {col}")
 
             conn.commit()
 
             inserted = 0
 
-            # ================= INSERT DATA =================
+            # ================= INSERT (FIXED) =================
             for row in rows:
                 try:
                     values = []
@@ -141,14 +100,12 @@ try:
                     for i, col in enumerate(columns):
                         val = row[i] if i < len(row) else None
 
-                        if "date" in col:
-                            val = format_date(val)
-
+                        # 🔥 IMPORTANT : on prend TOUT même vide
                         valid_columns.append(col)
                         values.append(val)
 
                     placeholders = ", ".join(["%s"] * len(valid_columns))
-                    columns_sql = ", ".join(valid_columns)
+                    columns_sql = ", ".join([f'"{c}"' for c in valid_columns])
 
                     query = f"""
                         INSERT INTO {table_name} ({columns_sql})
@@ -159,11 +116,11 @@ try:
                     inserted += 1
 
                 except Exception as e:
-                    print(f"⚠️ ligne ignorée: {e}")
                     conn.rollback()
+                    print("⚠️ ligne ignorée:", e)
 
             conn.commit()
-            print(f"✅ {table_name} terminé ({inserted} lignes insérées)")
+            print(f"✅ {table_name} terminé ({inserted} insertions)")
 
         except Exception as e:
             conn.rollback()
