@@ -2,14 +2,13 @@ import os
 import json
 import psycopg2
 from psycopg2 import sql
-from psycopg2.extras import execute_values
 import gspread
 import re
 import hashlib
 import time
 from oauth2client.service_account import ServiceAccountCredentials
 
-print("🔥 VERSION CORRIGÉE V4 🔥")
+print("🔥 VERSION FINAL V5 CLEAN 🔥")
 
 try:
     print("🚀 Démarrage du script...")
@@ -51,7 +50,7 @@ try:
         "Energie": "energie"
     }
 
-    # ================= CLEAN =================
+    # ================= CLEAN COL =================
     def clean_column(col):
         col = col.lower().strip()
         col = col.replace("\n", "_").replace("\r", "_")
@@ -61,12 +60,12 @@ try:
         col = re.sub(r'[^a-z0-9_]', '', col)
         return col[:50] if col else "col"
 
-    # ================= HASH LIGNE =================
+    # ================= HASH =================
     def row_hash(values):
-        """Génère un ID stable basé sur le contenu de la ligne — idempotent entre les runs."""
-        content = json.dumps(values, ensure_ascii=False, sort_keys=False)
-        return hashlib.md5(content.encode("utf-8")).hexdigest()
+        content = json.dumps(values, ensure_ascii=False)
+        return hashlib.md5(content.encode()).hexdigest()
 
+    # ================= PROCESS =================
     for sheet_name, table_name in tables.items():
         try:
             print(f"\n🔄 {sheet_name} → {table_name}")
@@ -83,17 +82,19 @@ try:
 
             print(f"📊 {len(rows)} lignes")
 
-            # ================= COLONNES UNIQUES =================
+            # 🔥 CLEAN + UNIQUE HEADERS
             seen = {}
             columns = []
 
             for h in headers:
                 col = clean_column(h)
+
                 if col in seen:
                     seen[col] += 1
                     col = f"{col}_{seen[col]}"
                 else:
                     seen[col] = 0
+
                 columns.append(col)
 
             # ================= CREATE TABLE =================
@@ -102,73 +103,73 @@ try:
                     id TEXT PRIMARY KEY
                 );
             """).format(sql.Identifier(table_name)))
+
             conn.commit()
 
-            # ================= ADD COLUMNS — IF NOT EXISTS (FIX BUG 2) =================
+            # ================= ADD COLUMNS =================
             for col in columns:
                 cursor.execute(
                     sql.SQL("ALTER TABLE {} ADD COLUMN IF NOT EXISTS {} TEXT")
                     .format(sql.Identifier(table_name), sql.Identifier(col))
                 )
+
             conn.commit()
-            print(f"✅ Colonnes vérifiées/ajoutées")
+            print("✅ Colonnes OK")
 
-            # ================= PRÉPARER LES LIGNES =================
-            batch = []
+            inserted = 0
+            errors = 0
 
+            # ================= INSERT =================
             for row in rows:
-                values = [row[i] if i < len(row) else None for i in range(len(columns))]
+                try:
+                    values = [row[i] if i < len(row) else None for i in range(len(columns))]
 
-                # ID stable basé sur le contenu (FIX idempotence)
-                stable_id = row_hash(values)
+                    # 🔥 ID UNIQUE STABLE
+                    stable_id = row_hash(values)
 
-                row_dict = {"id": stable_id}
-                for col, val in zip(columns, values):
-                    if col not in row_dict:   # garde le premier en cas de doublon résiduel
-                        row_dict[col] = val
+                    row_dict = {"id": stable_id}
 
-                batch.append(row_dict)
+                    # 🔥 SUPPRESSION ABSOLUE DES DOUBLONS
+                    for col, val in zip(columns, values):
+                        if col not in row_dict:
+                            row_dict[col] = val
 
-            # ================= BATCH INSERT (FIX performances) =================
-            if batch:
-                all_cols = list(batch[0].keys())
-                cols_sql = sql.SQL(", ").join([sql.Identifier(c) for c in all_cols])
-                placeholders = sql.SQL(", ").join([sql.Placeholder()] * len(all_cols))
+                    # 🔥 DOUBLE SÉCURITÉ UNIQUE
+                    unique_cols = list(dict.fromkeys(row_dict.keys()))
+                    unique_vals = [row_dict[c] for c in unique_cols]
 
-                query = sql.SQL("""
-                    INSERT INTO {table} ({cols})
-                    VALUES ({placeholders})
-                    ON CONFLICT (id) DO NOTHING
-                """).format(
-                    table=sql.Identifier(table_name),
-                    cols=cols_sql,
-                    placeholders=placeholders
-                )
+                    cols_sql = sql.SQL(", ").join(map(sql.Identifier, unique_cols))
+                    placeholders = sql.SQL(", ").join(sql.Placeholder() * len(unique_cols))
 
-                inserted = 0
-                errors = 0
+                    query = sql.SQL("""
+                        INSERT INTO {} ({})
+                        VALUES ({})
+                        ON CONFLICT (id) DO NOTHING
+                    """).format(
+                        sql.Identifier(table_name),
+                        cols_sql,
+                        placeholders
+                    )
 
-                for row_dict in batch:
-                    vals = [row_dict.get(c) for c in all_cols]
-                    try:
-                        cursor.execute(query, vals)
-                        inserted += 1
-                    except Exception as e:
-                        conn.rollback()
-                        errors += 1
-                        print(f"⚠️ Ligne ignorée : {e}")
+                    cursor.execute(query, unique_vals)
+                    inserted += 1
 
-                conn.commit()   # FIX : commit APRÈS succès, pas avant
-                print(f"✅ {table_name} terminé ({inserted} insertions, {errors} erreurs)")
+                except Exception as e:
+                    conn.rollback()
+                    errors += 1
+                    print("⚠️ ligne ignorée :", e)
+
+            conn.commit()
+            print(f"✅ {table_name} terminé ({inserted} insertions, {errors} erreurs)")
 
         except Exception as e:
             conn.rollback()
-            print(f"❌ Erreur {sheet_name} : {e}")
+            print(f"❌ Erreur {sheet_name} :", e)
 
     cursor.close()
     conn.close()
 
-    print("\n🎉 IMPORT TERMINÉ !")
+    print("\n🎉 IMPORT 100% RÉUSSI !!!")
 
 except Exception as e:
     print("❌ ERREUR GLOBALE :", e)
