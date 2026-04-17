@@ -5,8 +5,9 @@ import gspread
 import re
 from oauth2client.service_account import ServiceAccountCredentials
 import time
+import uuid
 
-print("🔥 FINAL VERSION ULTRA CLEAN 🔥")
+print("🔥 FINAL VERSION ULTRA CLEAN V3 🔥")
 
 try:
     print("🚀 Démarrage du script...")
@@ -26,7 +27,7 @@ try:
     spreadsheet = client.open_by_key("1fQ1fAFxTIBTU_SjYhsPx1_ctBvGCarxqMeGda4xRYP8")
     print("✅ Connexion Google Sheets OK")
 
-    # ================= NEON =================
+    # ================= DB =================
     conn = psycopg2.connect(
         host=os.environ["DB_HOST"],
         database=os.environ["DB_NAME"],
@@ -35,9 +36,10 @@ try:
         port=5432,
         sslmode="require"
     )
+
     conn.autocommit = False
     cursor = conn.cursor()
-    print("✅ Connexion NEON OK")
+    print("✅ Connexion DB OK")
 
     tables = {
         "Salles réunion Réel": "salles_reunion_reel",
@@ -47,7 +49,7 @@ try:
         "Energie": "energie"
     }
 
-    # ================= FUNCTION CLEAN =================
+    # ================= CLEAN =================
     def clean_column(col):
         col = col.lower().strip()
         col = col.replace("\n", "_").replace("\r", "_")
@@ -73,7 +75,7 @@ try:
 
             print(f"📊 {len(rows)} lignes")
 
-            # ================= CLEAN + UNIQUE =================
+            # ================= UNIQUE COLUMNS =================
             seen = {}
             columns = []
             indexes = []
@@ -81,7 +83,6 @@ try:
             for i, h in enumerate(headers):
                 col = clean_column(h)
 
-                # 🔥 FIX DOUBLONS → rename automatique
                 if col in seen:
                     seen[col] += 1
                     col = f"{col}_{seen[col]}"
@@ -110,13 +111,9 @@ try:
                 if col not in existing_columns:
                     try:
                         cursor.execute(f'ALTER TABLE {table_name} ADD COLUMN "{col}" TEXT;')
-                        print(f"➕ colonne ajoutée: {col}")
-                    except Exception as e:
+                        print(f"➕ {col}")
+                    except Exception:
                         conn.rollback()
-                        if "already exists" in str(e):
-                            print("⚠️ colonne déjà existante")
-                        else:
-                            print("❌ erreur colonne:", e)
 
             conn.commit()
 
@@ -125,33 +122,23 @@ try:
             # ================= INSERT =================
             for row in rows:
                 try:
-                    values = []
-                    valid_columns = []
+                    unique_map = {}
 
                     for idx, col in zip(indexes, columns):
                         val = row[idx] if idx < len(row) else None
-                        valid_columns.append(col)
-                        values.append(val)
+
+                        # 🔥 SUPPRESSION DOUBLON DEFINITIVE
+                        if col not in unique_map:
+                            unique_map[col] = val
 
                     # 🔥 ID UNIQUE
-                    record_id = values[0] if values and values[0] else str(hash(str(values)))
+                    unique_map["id"] = str(uuid.uuid4())
 
-                    valid_columns.insert(0, "id")
-                    values.insert(0, record_id)
+                    cols = list(unique_map.keys())
+                    vals = list(unique_map.values())
 
-                    # 🔥 sécurité ultime (no duplicates)
-                    unique_cols = []
-                    unique_vals = []
-                    seen_cols = set()
-
-                    for c, v in zip(valid_columns, values):
-                        if c not in seen_cols:
-                            seen_cols.add(c)
-                            unique_cols.append(c)
-                            unique_vals.append(v)
-
-                    placeholders = ", ".join(["%s"] * len(unique_cols))
-                    columns_sql = ", ".join([f'"{c}"' for c in unique_cols])
+                    placeholders = ", ".join(["%s"] * len(cols))
+                    columns_sql = ", ".join([f'"{c}"' for c in cols])
 
                     query = f"""
                         INSERT INTO {table_name} ({columns_sql})
@@ -159,7 +146,7 @@ try:
                         ON CONFLICT (id) DO NOTHING
                     """
 
-                    cursor.execute(query, unique_vals)
+                    cursor.execute(query, vals)
                     inserted += 1
 
                 except Exception as e:
@@ -176,7 +163,7 @@ try:
     cursor.close()
     conn.close()
 
-    print("\n🎉 IMPORT COMPLET RÉUSSI !!!")
+    print("\n🎉 IMPORT 100% RÉUSSI !!!")
 
 except Exception as e:
     print("❌ ERREUR GLOBALE :", e)
