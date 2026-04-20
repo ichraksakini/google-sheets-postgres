@@ -8,7 +8,7 @@ import hashlib
 import time
 from oauth2client.service_account import ServiceAccountCredentials
 
-print("🔥 VERSION FINAL V5 CLEAN 🔥")
+print("🔥 VERSION FINAL V6 MULTI-SHEETS 🔥")
 
 try:
     print("🚀 Démarrage du script...")
@@ -25,7 +25,12 @@ try:
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
 
-    spreadsheet = client.open_by_key("1fQ1fAFxTIBTU_SjYhsPx1_ctBvGCarxqMeGda4xRYP8")
+    # ✅ MAIN SHEET (Mayssane réservations)
+    spreadsheet_main = client.open_by_key("1fQ1fAFxTIBTU_SjYhsPx1_ctBvGCarxqMeGda4xRYP8")
+
+    # ⚡ ENERGIE SHEET (SMARTFM)
+    spreadsheet_energie = client.open_by_key("14777AyMOF72u6jNjpzXQN1Sj9aw2Cx6ahJrOCbobqA")
+
     print("✅ Connexion Google Sheets OK")
 
     # ================= DB =================
@@ -70,7 +75,12 @@ try:
         try:
             print(f"\n🔄 {sheet_name} → {table_name}")
 
-            sheet = spreadsheet.worksheet(sheet_name)
+            # 🔥 SWITCH AUTOMATIQUE GOOGLE SHEET
+            if sheet_name == "Energie":
+                sheet = spreadsheet_energie.worksheet(sheet_name)
+            else:
+                sheet = spreadsheet_main.worksheet(sheet_name)
+
             data = sheet.get_all_values()
 
             if not data or len(data) < 2:
@@ -129,12 +139,10 @@ try:
 
                     row_dict = {"id": stable_id}
 
-                    # 🔥 SUPPRESSION ABSOLUE DES DOUBLONS
                     for col, val in zip(columns, values):
                         if col not in row_dict:
                             row_dict[col] = val
 
-                    # 🔥 DOUBLE SÉCURITÉ UNIQUE
                     unique_cols = list(dict.fromkeys(row_dict.keys()))
                     unique_vals = [row_dict[c] for c in unique_cols]
 
