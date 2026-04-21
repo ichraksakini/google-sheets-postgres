@@ -8,7 +8,7 @@ import hashlib
 import time
 from oauth2client.service_account import ServiceAccountCredentials
 
-print("🔥 VERSION FINAL V6 MULTI-SHEETS 🔥")
+print("🔥 VERSION FINAL V7 FIX 🔥")
 
 try:
     print("🚀 Démarrage du script...")
@@ -25,11 +25,11 @@ try:
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
 
-    # ✅ MAIN SHEET (Mayssane réservations)
+    # ✅ MAIN SHEET (Mayssane)
     spreadsheet_main = client.open_by_key("1fQ1fAFxTIBTU_SjYhsPx1_ctBvGCarxqMeGda4xRYP8")
 
-    # ⚡ ENERGIE SHEET (SMARTFM)
-   spreadsheet_energie = client.open_by_key("14Z772AyMOF72u6jNjpzXQN1Sj9aw2Cx6ahJrOCbobqA")
+    # ✅ ENERGIE SHEET (SMARTFM)
+    spreadsheet_energie = client.open_by_key("14Z772AyMOF72u6jNjpzXQN1Sj9aw2Cx6ahJrOCbobqA")
 
     print("✅ Connexion Google Sheets OK")
 
@@ -55,7 +55,6 @@ try:
         "Energie": "energie"
     }
 
-    # ================= CLEAN COL =================
     def clean_column(col):
         col = col.lower().strip()
         col = col.replace("\n", "_").replace("\r", "_")
@@ -65,17 +64,15 @@ try:
         col = re.sub(r'[^a-z0-9_]', '', col)
         return col[:50] if col else "col"
 
-    # ================= HASH =================
     def row_hash(values):
         content = json.dumps(values, ensure_ascii=False)
         return hashlib.md5(content.encode()).hexdigest()
 
-    # ================= PROCESS =================
     for sheet_name, table_name in tables.items():
         try:
             print(f"\n🔄 {sheet_name} → {table_name}")
 
-            # 🔥 SWITCH AUTOMATIQUE GOOGLE SHEET
+            # 🔥 SWITCH SHEET
             if sheet_name == "Energie":
                 sheet = spreadsheet_energie.worksheet(sheet_name)
             else:
@@ -92,7 +89,6 @@ try:
 
             print(f"📊 {len(rows)} lignes")
 
-            # 🔥 CLEAN + UNIQUE HEADERS
             seen = {}
             columns = []
 
@@ -107,7 +103,6 @@ try:
 
                 columns.append(col)
 
-            # ================= CREATE TABLE =================
             cursor.execute(sql.SQL("""
                 CREATE TABLE IF NOT EXISTS {} (
                     id TEXT PRIMARY KEY
@@ -116,7 +111,6 @@ try:
 
             conn.commit()
 
-            # ================= ADD COLUMNS =================
             for col in columns:
                 cursor.execute(
                     sql.SQL("ALTER TABLE {} ADD COLUMN IF NOT EXISTS {} TEXT")
@@ -129,12 +123,9 @@ try:
             inserted = 0
             errors = 0
 
-            # ================= INSERT =================
             for row in rows:
                 try:
                     values = [row[i] if i < len(row) else None for i in range(len(columns))]
-
-                    # 🔥 ID UNIQUE STABLE
                     stable_id = row_hash(values)
 
                     row_dict = {"id": stable_id}
