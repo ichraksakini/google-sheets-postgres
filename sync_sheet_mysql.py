@@ -29,7 +29,7 @@ try:
     spreadsheet_main = client.open_by_key("1fQ1fAFxTIBTU_SjYhsPx1_ctBvGCarxqMeGda4xRYP8")
 
     # ⚡ ENERGIE SHEET (SMARTFM)
-    spreadsheet_energie = client.open_by_key("14777AyMOF72u6jNjpzXQN1Sj9aw2Cx6ahJrOCbobqA")
+   spreadsheet_energie = client.open_by_key("14Z772AyMOF72u6jNjpzXQN1Sj9aw2Cx6ahJrOCbobqA")
 
     print("✅ Connexion Google Sheets OK")
 
