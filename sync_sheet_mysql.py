@@ -9,6 +9,7 @@ import time
 from oauth2client.service_account import ServiceAccountCredentials
 
 print("🔥 VERSION FINAL V7 FIX 🔥")
+print("🔥 VERSION TEST ENERGIE 🔥")  # ✅ AJOUT ICI
 
 try:
     print("🚀 Démarrage du script...")
@@ -72,7 +73,6 @@ try:
         try:
             print(f"\n🔄 {sheet_name} → {table_name}")
 
-            # 🔥 SWITCH SHEET
             if sheet_name == "Energie":
                 sheet = spreadsheet_energie.worksheet(sheet_name)
             else:
